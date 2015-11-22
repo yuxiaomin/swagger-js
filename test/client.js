@@ -24,6 +24,7 @@ describe('SwaggerClient', function () {
     instance.close();
     done();
   });
+
   /* jshint ignore:end */
   it('ensure externalDocs is attached to the client when available (Issue 276)', function (done) {
     var client = new SwaggerClient({
@@ -34,6 +35,35 @@ describe('SwaggerClient', function () {
         done();
       }
     });
+  });
+
+  describe('enabling promises', function() {
+
+    var client;
+
+    describe('given a valid spec (or url)', function() {
+      beforeEach(function() {
+        client = new SwaggerClient({
+          spec: petstoreRaw,
+          usePromise: true
+        });
+      });
+
+      it('should resolve with an object as response', function(done) {
+        client.then(function(response) {
+          expect(response).toNotBe(null);
+          done();
+        });
+      });
+
+      it('should set the client to be ready', function(done) {
+        client.then(function(response) {
+          expect(response.ready).toBe(true);
+          done();
+        });
+      });
+    });
+
   });
 
   describe('Runtime Support', function() {
@@ -294,7 +324,7 @@ describe('SwaggerClient', function () {
     });
   });
 
-  it('should should use a responseInterceptor', function(done) {
+  it('should use a responseInterceptor', function(done) {
     var responseInterceptor = {
       apply: function(data) {
         data.url = 'foo/bar';
@@ -311,6 +341,180 @@ describe('SwaggerClient', function () {
           done();
         });
       }
+    });
+  });
+
+  it('should properly parse an array property', function(done) {
+    var spec = {
+      paths: {
+        '/foo': {
+          get: {
+            operationId: 'myop',
+            tags: [
+                'test'
+            ],
+            parameters: [
+              {
+                in: 'query',
+                name: 'username',
+                type: 'array',
+                items: {
+                  type: 'string',
+                  enum: [
+                    'a','b'
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    };
+
+    new SwaggerClient({
+      url: 'http://example.com/petstore.yaml',
+      spec: spec,
+      usePromise: true
+    }).then(function(client) {
+      var param = client.test.apis.myop.parameters[0];
+      expect(param.enum).toBe(undefined);
+      expect(param.items.enum).toEqual(['a', 'b']);
+      done();
+    }).catch(function(exception) {
+      done(exception);
+    });
+  });
+
+  it('tests https://github.com/swagger-api/swagger-js/issues/535', function(done) {
+    var spec = {
+      paths: {
+        '/foo': {
+          get: {
+            tags: [ 'foo' ],
+            operationId: 'test',
+            parameters: [
+              {
+                in: 'body',
+                name: 'body',
+                schema: { $ref: '#/definitions/ModelA' }
+              }
+            ]
+          }
+        }
+      },
+      definitions: {
+        ModelA: {
+          required: [ 'modelB' ],
+          properties: {
+            modelB: { $ref: '#/definitions/ModelB' }
+          }
+        },
+        ModelB: {
+          required: [ 'property1', 'property2' ],
+          properties: {
+            property1: { type: 'string', enum: ['a','b'] },
+            property2: { type: 'string' }
+          }
+        }
+      }
+    };
+
+    new SwaggerClient({
+      url: 'http://example.com/petstore.yaml',
+      spec: spec,
+      usePromise: true
+    }).then(function(client) {
+      var param = client.foo.apis.test.parameters[0];
+      var modelA = JSON.parse(param.sampleJSON);
+      expect(modelA).toBeAn('object');
+      expect(modelA.modelB).toBeAn('object');
+
+      var modelB = client.models.ModelB;
+      expect(modelB).toBeAn('object');
+      expect(modelB.definition.properties.property1).toBeAn('object');
+      expect(modelB.definition.properties.property2).toBeAn('object');
+
+      done();
+    }).catch(function(exception) {
+      done(exception);
+    });
+  });
+
+  it('creates unique operationIds per #595', function(done) {
+    var spec = {
+      paths: {
+        '/foo': {
+          get: {
+            operationId: 'test',
+            parameters: [],
+            responses: {
+              'default': {
+                description: 'success'
+              }
+            }
+          }
+        },
+        '/bar': {
+          get: {
+            operationId: 'test',
+            parameters: [],
+            responses: {
+              'default': {
+                description: 'success'
+              }
+            }
+          }
+        }
+      }
+    };
+    new SwaggerClient({
+      url: 'http://example.com/petstore.yaml',
+      spec: spec,
+      usePromise: true
+    }).then(function (client) {
+      expect(client.default.test).toBeA('function');
+      expect(client.default.test_0).toBeAn('function');
+      done();
+    }).catch(function (exception) {
+      done(exception);
+    });
+  });
+
+  it('applies both a request and response interceptor per #601 with promises', function(done) {
+    var startTime = 0;
+    var elapsed = 0;
+
+    var interceptor = {
+      requestInterceptor: {
+        apply: function (requestObj) {
+          // rewrites an invalid pet id (-100) to be valid (1)
+          // you can do what you want here, like inject headers, etc.
+          startTime = new Date().getTime();
+          return requestObj;
+        }
+      },
+      responseInterceptor: {
+        apply: function (responseObj) {
+          elapsed = new Date().getTime() - startTime;
+          return responseObj;
+        }
+      }
+    };
+
+    new SwaggerClient({
+      url: 'http://petstore.swagger.io/v2/swagger.json',
+      usePromise: true,
+      requestInterceptor: interceptor.requestInterceptor,
+      responseInterceptor: interceptor.responseInterceptor
+    }).then(function(client) {
+        console.log('got the client!');
+      client.pet.getPetById({petId: 1}).then(function (pet){
+        expect(pet.obj).toBeAn('object');
+        expect(elapsed).toBeGreaterThan(0);
+        done();
+      });
+    }).catch(function(exception) {
+      done(exception);
     });
   });
 });

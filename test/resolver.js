@@ -5,6 +5,7 @@
 var expect = require('expect');
 var test = require('unit.js');
 var mock = require('./mock');
+var SwaggerClient = require('..');
 var Resolver = require('../lib/resolver');
 var instance;
 
@@ -13,6 +14,7 @@ describe('swagger resolver', function () {
     mock.petstore(done, function (petstore, server){
       instance = server;
     });
+    // this.timeout(5000 * 1000);
   });
 
   after(function (done){
@@ -61,7 +63,7 @@ describe('swagger resolver', function () {
     };
 
     api.resolve(spec, function (spec, unresolved) {
-      expect(unresolved['http://localhost:8000/v2/petstore.jsonZZZ#/definitions/Category']).toEqual(
+      expect(unresolved['/definitions/Category']).toEqual(
         {
           root: 'http://localhost:8000/v2/petstore.jsonZZZ',
           location: '/definitions/Category'
@@ -84,7 +86,7 @@ describe('swagger resolver', function () {
     };
 
     api.resolve(spec, function (spec, unresolved) {
-      expect(unresolved['http://localhost:8000/v2/petstore.json#/definitionz/Category']).toEqual(
+      expect(unresolved['/definitionz/Category']).toEqual(
         {
           root: 'http://localhost:8000/v2/petstore.json',
           location: '/definitionz/Category'
@@ -107,7 +109,7 @@ describe('swagger resolver', function () {
     };
 
     api.resolve(spec, function (spec, unresolved) {
-      expect(unresolved['http://localhost:8000/v2/petstore.json#/definition/Categoryzzz']).toEqual({
+      expect(unresolved['/definition/Categoryzzz']).toEqual({
         root: 'http://localhost:8000/v2/petstore.json',
         location: '/definition/Categoryzzz'
       });
@@ -841,6 +843,248 @@ describe('swagger resolver', function () {
 
     api.resolve(spec, 'http://localhost:8000/v2/swagger.json', function (spec, unresolved) {
       expect(spec.definitions['single.json']).toExist();
+      done();
+    });
+  });
+
+  it('resloves absolute references', function(done) {
+    var api = new Resolver();
+    var sample;
+    var opts = opts || {};
+    opts.url = opts.url || 'http://localhost:8000/v2/absoluteRef.json';
+    opts.success = function () {
+      var response = sample.apis['default'].operations.get_linked.successResponse;
+      expect(response).toExist();
+      expect(response['200']).toExist();
+      done();
+    };
+
+    sample = new SwaggerClient(opts);
+  });
+
+  it('resolves absolute references per #587', function(done) {
+    var api = new Resolver();
+    var sample;
+    var opts = opts || {};
+    opts.url = opts.url || 'http://localhost:8000/v2/test.json';
+    opts.success = function () {
+      expect(sample.swaggerObject.definitions).toExist();
+      expect(sample.swaggerObject.definitions['error.json']).toExist();
+      expect(sample.apis.Occupations.operations.post_occupations.parameters[0].schema).toEqual(
+          { '$ref': '#/definitions/error.json' });
+      expect(sample.apis.Occupations.operations.post_occupations.responses['500'].schema).toEqual(
+          { '$ref': '#/definitions/error.json' }
+      );
+      done();
+    };
+
+    sample = new SwaggerClient(opts);
+  });
+
+  it('resolves top-level shared parameters', function(done) {
+    var api = new Resolver();
+    var spec = {
+      parameters: {
+        skip: {
+          in: 'query',
+          name: 'skip',
+          type: 'integer',
+          format: 'int32',
+          required: 'true'
+        }
+      },
+      paths: {
+        '/foo': {
+          get: {
+            parameters: [
+              { $ref: '#/parameters/skip'}
+            ],
+            responses: {
+              200: {
+                description: 'ok'
+              }
+            }
+          }
+        }
+      }
+    };
+    api.resolve(spec, 'http://localhost:8000/v2/swagger.json', function (spec, unresolved) {
+      expect(spec.paths['/foo'].get.parameters[0]).toBeAn('object');
+      done();
+    });
+  });
+
+  it('resolves path-level shared parameters', function(done) {
+    var api = new Resolver();
+    var spec = {
+      paths: {
+        '/foo': {
+          parameters: [
+            {
+              in: 'query',
+              name: 'skip',
+              type: 'integer',
+              format: 'int32',
+              required: 'true'
+            }
+          ],
+          get: {
+            parameters: [
+              {
+                in: 'query',
+                name: 'limit',
+                type: 'integer',
+                format: 'int32',
+                required: 'true'
+              }
+            ],
+            responses: {
+              200: {
+                description: 'ok'
+              }
+            }
+          }
+        }
+      }
+    };
+    api.resolve(spec, 'http://localhost:8000/v2/swagger.json', function (spec, unresolved) {
+      var parameters = spec.paths['/foo'].get.parameters;
+      expect(parameters[0].name).toEqual('skip');
+      expect(parameters[1].name).toEqual('limit');
+      expect(spec.paths['/foo'].parameters.length).toBe(0);
+      done();
+    });
+  });
+
+  it('resolves shared responses', function(done) {
+    var api = new Resolver();
+    var spec = {
+      "swagger" : "2.0",
+      "info" : {
+        "version" : "0.0.0",
+        "title" : "Simple API"
+      },
+      "responses": {
+        "Success": {
+          "description": "Success",
+          "schema": {
+            "type": "string"
+          }
+        },
+        "Error": {
+          "description": "Error",
+          "schema": {
+            "type": "string"
+          }
+        }
+      },
+      "paths" : {
+        "/" : {
+          "get" : {
+            "parameters" : [ ],
+            "responses" : {
+              "200" : {
+                "$ref": "#/responses/Success"
+              },
+              "default": {
+                "$ref": "#/responses/Error"
+              }
+            }
+          }
+        }
+      },
+      "definitions" : { }
+    };
+    api.resolve(spec, 'http://localhost:8000/v2/swagger.json', function (spec, unresolved) {
+      var responses = spec.paths['/'].get.responses;
+      expect(responses['200'].description).toBe('Success');
+      expect(responses['default'].description).toBe('Error');
+      done();
+    });
+  });
+
+  it('resolves path-level shared parameters', function(done) {
+    var api = new Resolver();
+    var spec = {
+      paths: {
+        '/foo': {
+          parameters: [
+            {
+              in: 'query',
+              name: 'skip',
+              type: 'integer',
+              format: 'int32',
+              required: 'true'
+            }
+          ],
+          get: {
+            parameters: [
+              {
+                in: 'query',
+                name: 'limit',
+                type: 'integer',
+                format: 'int32',
+                required: 'true'
+              }
+            ],
+            responses: {
+              200: {
+                description: 'ok'
+              }
+            }
+          }
+        }
+      }
+    };
+    api.resolve(spec, 'http://localhost:8000/v2/swagger.json', function (spec, unresolved) {
+      var parameters = spec.paths['/foo'].get.parameters;
+      expect(parameters[0].name).toEqual('skip');
+      expect(parameters[1].name).toEqual('limit');
+      expect(spec.paths['/foo'].parameters.length).toBe(0);
+      done();
+    });
+  });
+
+  it('resolves nested array parameters', function(done) {
+    var api = new Resolver();
+    var spec = {
+      'swagger' : '2.0',
+      'info' : {
+        'version' : '0.0.0',
+        'title' : 'Simple API'
+      },
+      'paths' : {
+        '/' : {
+          'post' : {
+            'parameters' : [{
+              in: 'body',
+              name: 'myArr',
+              required: true,
+              schema: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    myProp: {
+                      type: 'string'
+                    }
+                  }
+                }
+              }
+            }],
+            'responses' : {
+              'default' : {
+                'description': 'success'
+              }
+            }
+          }
+        }
+      },
+      'definitions' : { }
+    };
+    api.resolve(spec, 'http://localhost:8000/v2/swagger.json', function (spec, unresolved) {
+      expect(spec.definitions).toBeAn('object');
+      expect(spec.definitions.inline_model).toBeAn('object');
       done();
     });
   });
