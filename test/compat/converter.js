@@ -26,7 +26,7 @@ describe('converts specs', function () {
 
   it('ignores an empty spec', function(done) {
       var converter = new SwaggerSpecConverter();
-      converter.convert({}, {}, function(result) {
+      converter.convert({}, {}, {}, function(result) {
         expect(result).toBe(null);
         done();
       });
@@ -42,7 +42,7 @@ describe('converts specs', function () {
     obj.on.response = function(data) {
       var converter = new SwaggerSpecConverter();
       converter.setDocumentationLocation('http://localhost:8001/v1/api-docs');
-      converter.convert(data.obj, {}, function(swagger) {
+      converter.convert(data.obj, {}, {}, function(swagger) {
         test.array(swagger.tags);
         var petTag = swagger.tags[0];
         var userTag = swagger.tags[1];
@@ -124,7 +124,7 @@ describe('converts specs', function () {
     obj.on.response = function(data) {
       var converter = new SwaggerSpecConverter();
       converter.setDocumentationLocation('http://localhost:8001/v1/api-docs');
-      converter.convert(data.obj, {}, function(swagger) {
+      converter.convert(data.obj, {}, {}, function(swagger) {
 
         // metadata tests
         expect(swagger.swagger).toBe('2.0');
@@ -206,7 +206,7 @@ describe('converts specs', function () {
     obj.on.response = function(data) {
       var converter = new SwaggerSpecConverter();
       converter.setDocumentationLocation('http://localhost:8001/v1/word.json');
-      converter.convert(data.obj, {}, function(swagger) {
+      converter.convert(data.obj, {}, {}, function(swagger) {
         expect(Object.keys(swagger.paths).length).toBe(12);
 
         var getDefinitions = swagger.paths['/word.{format}/{word}/definitions'].get;
@@ -260,7 +260,7 @@ describe('converts specs', function () {
       obj.on.response = function(data) {
         var converter = new SwaggerSpecConverter();
         converter.setDocumentationLocation('http://localhost:8001/v1/api-docs');
-        converter.convert(data.obj, {}, function(swagger) {
+        converter.convert(data.obj, {}, {}, function(swagger) {
           issuesSpec = swagger;
           done();
         });
@@ -305,7 +305,7 @@ describe('converts specs', function () {
           apply: function (requestObj) {
             // rewrites an invalid pet id (-100) to be valid (1)
             // you can do what you want here, like inject headers, etc.
-            callCount += 1
+            callCount += 1;
             return requestObj;
           }
         }
@@ -319,8 +319,8 @@ describe('converts specs', function () {
         var operation = client.apis.pet.operations.getPetById;
         expect(operation.successResponse[200].definition).toBeAn('object');
         expect(operation.responses[400].schema).toBeAn('object');
-        expect(operation.responses[400].schema['$ref']).toBe('#/definitions/VeryBad');
-        expect(callCount).toEqual(1);
+        expect(operation.responses[400].schema.$ref).toBe('#/definitions/VeryBad');
+        expect(callCount).toEqual(4);
         done();
       }).catch(function(e) {
         console.log(e);
