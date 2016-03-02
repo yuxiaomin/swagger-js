@@ -332,13 +332,17 @@ describe('SwaggerClient', function () {
 
     var client = new SwaggerClient({
       spec: spec,
-      success: function () {
-        var result = client.pet.testOptions({}, function (data) {
-          expect(data.method).toEqual('OPTIONS');
+      usePromise: true
+    }).then(function (client) {
+      client.pet.testOptions()
+        .then(function (data) {
           done();
         });
-      }
-    });
+    })
+    .catch (function (err) {
+      // this is expected
+      done();
+    })
   });
 
   it('should should use a custom http client', function(done) {
@@ -536,7 +540,7 @@ describe('SwaggerClient', function () {
     };
 
     new SwaggerClient({
-      url: 'http://petstore.swagger.io/v2/swagger.json',
+      url: 'http://localhost:8000/v2/petstore.json',
       usePromise: true,
       requestInterceptor: interceptor.requestInterceptor,
       responseInterceptor: interceptor.responseInterceptor

@@ -411,7 +411,7 @@ describe('swagger basePath override functions', function () {
       apply: function(data) {
         // rewrites an invalid pet id (-100) to be valid (1)
         // you can do what you want here, like inject headers, etc.
-        data.url = 'http://petstore.swagger.io/v2/pet/1';
+        data.url = 'http://localhost:8000/v2/api/pet/1';
         return data;
       }
     };
@@ -467,6 +467,50 @@ describe('swagger basePath override functions', function () {
       done();
     });
   });
+
+  it('applies request interceptor and waits for beforeSend as per #701', function(done) {
+    this.timeout(10000);
+    var petApi = sample.pet;
+    var startTime = new Date().getTime();
+    var elapsed = 0;
+
+    var interceptor = {
+      requestInterceptor: {
+        apply: function (data) {
+          data.beforeSend = function(_done) {
+            // simulate async
+            setTimeout(function() {
+              _done(data);
+            }, 600);
+          };
+          return data;
+        }
+      },
+      responseInterceptor: {
+        apply: function (data) {
+          elapsed = new Date().getTime() - startTime;
+          return data;
+        }
+      }
+    };
+
+    petApi.getPetById({petId: 1}, {
+      requestInterceptor: interceptor.requestInterceptor,
+      responseInterceptor: interceptor.responseInterceptor
+    }, function(success){
+      expect(success.obj).toBeAn('object');
+      expect(success.obj.id).toBe(1);
+      expect(elapsed).toBeGreaterThan(500);
+      done();
+    }, function(err){
+      expect(err.obj).toBeAn('object');
+      expect(err.obj.code).toBe(400);
+      expect(err.obj.type).toBe('bad input');
+      expect(err.obj.message).toBe('sorry!');
+      done();
+    });
+  });
+
 
   it('overrides a basePath https://github.com/swagger-api/swagger-ui/issues/532', function (done) {
     sample.setBasePath('/bar');
