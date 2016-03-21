@@ -685,4 +685,50 @@ describe('SwaggerClient', function () {
       done(exception);
     });
   });
+
+  it('reads a swagger definition', function(done) {
+    var spec = {
+      paths: {
+        '/v1/sessioninfo': {
+          get: {
+            tags: [
+                'testing'
+            ],
+            operationId: 'headerTest',
+            summary: 'Get information about the current user\'s session.',
+            produces: [
+              'application/json'
+            ],
+            parameters: [
+              {
+                name: 'sessionToken',
+                description: 'Session authentication token.',
+                in: 'header',
+                required: true,
+                type: 'string'
+              }
+            ],
+            responses: {
+              default: {
+                description: 'ok'
+              }
+            }
+          }
+        }
+      }
+    }
+
+    new SwaggerClient({
+      url: 'http://localhost:8000/v2/swagger.json',
+      spec: spec,
+      usePromise: true
+    }).then(function(client) {
+      var msg = client.testing.headerTest.help();
+
+      expect(msg).toContain('sessionToken (string): Session authentication token');
+      done();
+    }).catch(function(exception) {
+      done(exception);
+    });
+  })
 });
